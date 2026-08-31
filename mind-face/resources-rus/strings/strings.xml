@@ -1,0 +1,12 @@
+<strings>
+    <string id="HourShort">ч</string>
+
+    <string id="SettingShowSeconds">Показывать секунды</string>
+    <string id="SettingMinuteColor">Цвет минут</string>
+    <string id="SettingTimeFont">Шрифт времени</string>
+
+    <string id="ColorRed">Красный</string>
+    <string id="ColorBlue">Синий</string>
+    <string id="ColorOrange">Оранжевый</string>
+    <string id="ColorWhite">Белый</string>
+</strings>

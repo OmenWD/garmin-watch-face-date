@@ -1,0 +1,22 @@
+<strings>
+    <string id="AppName">Mind Face</string>
+
+    <!-- Suffix after the recovery time, e.g. "12h" -->
+    <string id="HourShort">h</string>
+
+    <!-- Settings screen in Garmin Connect -->
+    <string id="SettingShowSeconds">Show seconds</string>
+    <string id="SettingMinuteColor">Minute color</string>
+    <string id="SettingTimeFont">Time font</string>
+
+    <string id="FontBionic">Bionic Bold</string>
+    <string id="FontPridi">Pridi SemiBold</string>
+    <string id="FontRobotoBlack">Roboto Black</string>
+    <string id="FontRobotoCondensed">Roboto Condensed Bold</string>
+    <string id="FontRobotoItalic">Roboto Condensed Italic</string>
+
+    <string id="ColorRed">Red</string>
+    <string id="ColorBlue">Blue</string>
+    <string id="ColorOrange">Orange</string>
+    <string id="ColorWhite">White</string>
+</strings>

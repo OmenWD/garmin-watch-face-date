@@ -1,0 +1,24 @@
+<settings>
+    <setting propertyKey="@Properties.TimeFont" title="@Strings.SettingTimeFont">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.FontBionic</listEntry>
+            <listEntry value="1">@Strings.FontPridi</listEntry>
+            <listEntry value="2">@Strings.FontRobotoBlack</listEntry>
+            <listEntry value="3">@Strings.FontRobotoCondensed</listEntry>
+            <listEntry value="4">@Strings.FontRobotoItalic</listEntry>
+        </settingConfig>
+    </setting>
+
+    <setting propertyKey="@Properties.ShowSeconds" title="@Strings.SettingShowSeconds">
+        <settingConfig type="boolean" />
+    </setting>
+
+    <setting propertyKey="@Properties.MinuteColor" title="@Strings.SettingMinuteColor">
+        <settingConfig type="list">
+            <listEntry value="16711680">@Strings.ColorRed</listEntry>
+            <listEntry value="43775">@Strings.ColorBlue</listEntry>
+            <listEntry value="16733440">@Strings.ColorOrange</listEntry>
+            <listEntry value="16777215">@Strings.ColorWhite</listEntry>
+        </settingConfig>
+    </setting>
+</settings>

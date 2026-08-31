@@ -1,0 +1,7 @@
+<properties>
+    <property id="ShowSeconds" type="boolean">true</property>
+    <!-- 0xRRGGBB, restricted to the fr955 MIP palette (channels 00/55/AA/FF) -->
+    <property id="MinuteColor" type="number">16711680</property>
+    <!-- Index into FACES in MindFaceView.mc -->
+    <property id="TimeFont" type="number">2</property>
+</properties>

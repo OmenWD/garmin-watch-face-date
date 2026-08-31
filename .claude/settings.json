@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(P=/Users/maksimsadykov/Projects/AI/Garmin/WatchFace/mind-face; SDK=$(cat ~/Library/Application\\ Support/Garmin/ConnectIQ/current-sdk.cfg); \"$SDK/bin/monkeyc\" *)",
+      "Bash(P=/Users/maksimsadykov/Projects/AI/Garmin/WatchFace/mind-face; SDK=$(cat ~/Library/Application\\ Support/Garmin/ConnectIQ/current-sdk.cfg); \"$SDK/bin/monkeydo\" *)"
+    ]
+  }
+}
