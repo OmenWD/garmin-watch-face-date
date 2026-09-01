@@ -72,6 +72,18 @@ class MindFaceView extends WatchUi.WatchFace {
     private var _secX as Number = 0;
     private var _secY as Number = 0;
 
+    // Digits 0-9 pre-rendered side by side in cells of _secDigitW. The seconds
+    // are repainted once a second all day, and that path is metered against the
+    // device power budget, so it blits from here instead of rasterising the
+    // vector face twice per tick.
+    private var _secAtlas as Graphics.BufferedBitmap? = null;
+    private var _secDigitW as Number = 0;
+
+    // The hollow hours cost nine passes of the largest font on the face for a
+    // picture that changes once an hour, so they are kept rendered here.
+    private var _hourBuf as Graphics.BufferedBitmap? = null;
+    private var _hourText as String = "";
+
     // Centre of the phone icon, recomputed on every full update.
     private var _phoneIconX as Number = 130;
 
@@ -81,20 +93,28 @@ class MindFaceView extends WatchUi.WatchFace {
     private var _faceIndex as Number = 0;
 
     private var _bodyBattery as Number? = null;
+    private var _bodyBatteryMinute as Number = -1;
+    private var _hasBodyBattery as Boolean = false;
 
-    private var _lowPower as Boolean = false;
     // Set when a setting that feeds onLayout changes, so the fonts get rebuilt
     // on the next update rather than only when the view is first laid out.
     private var _layoutDirty as Boolean = false;
 
     function initialize() {
         WatchFace.initialize();
+        _hasBodyBattery = (Toybox has :SensorHistory)
+            && (Toybox.SensorHistory has :getBodyBatteryHistory);
         loadSettings();
     }
 
     function loadSettings() as Void {
         _showSeconds = readBool("ShowSeconds", true);
-        _minuteColor = readNumber("MinuteColor", Colors.RED);
+
+        var color = readNumber("MinuteColor", Colors.RED);
+        if (color != _minuteColor) {
+            _minuteColor = color;
+            _layoutDirty = true;      // the seconds atlas is drawn in this colour
+        }
 
         var face = readNumber("TimeFont", 0);
         if (face < 0 || face >= FACES.size()) {
@@ -153,6 +173,11 @@ class MindFaceView extends WatchUi.WatchFace {
         _bbY = _dateY - dateH / 2 - gap - bbH / 2;
         _iconsY = _timeY + _timeHeight / 2 + timeGap + iconsH / 2;
         _recoveryY = _iconsY + iconsH / 2 + gap + recoveryH / 2;
+
+        // Both caches are keyed to the fonts just picked, so they go stale here.
+        _hourBuf = null;
+        _hourText = "";
+        buildSecondsAtlas();
     }
 
     // A row is as tall as the taller of its icon and its text.
@@ -164,14 +189,13 @@ class MindFaceView extends WatchUi.WatchFace {
     function onShow() as Void {
     }
 
+    // Nothing is drawn differently between power modes, and the system schedules
+    // the next update on the mode change itself -- so asking for one here would
+    // only repaint the frame that is already on the panel.
     function onExitSleep() as Void {
-        _lowPower = false;
-        WatchUi.requestUpdate();
     }
 
     function onEnterSleep() as Void {
-        _lowPower = true;
-        WatchUi.requestUpdate();
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {
@@ -184,7 +208,7 @@ class MindFaceView extends WatchUi.WatchFace {
             _layoutDirty = false;
         }
 
-        refreshBodyBattery();
+        refreshBodyBattery(System.getClockTime().min);
 
         dc.setColor(Colors.BACKGROUND, Colors.BACKGROUND);
         dc.clear();
@@ -207,9 +231,13 @@ class MindFaceView extends WatchUi.WatchFace {
     // drop partial updates for this watch face entirely.
     function onPartialUpdate(dc as Graphics.Dc) as Void {
         if (_showSeconds) {
-            dc.setClip(_secX, _secY, _secWidth, _secHeight);
-            dc.setColor(Colors.BACKGROUND, Colors.BACKGROUND);
-            dc.clear();
+            // Atlas cells carry their own background, so only the text fallback
+            // has to blank the old digits first.
+            if (_secAtlas == null) {
+                dc.setClip(_secX, _secY, _secWidth, _secHeight);
+                dc.setColor(Colors.BACKGROUND, Colors.BACKGROUND);
+                dc.clear();
+            }
             drawSeconds(dc);
             dc.clearClip();
         }
@@ -318,9 +346,7 @@ class MindFaceView extends WatchUi.WatchFace {
         var left = _cx - (wHH + gap + wMM + secPart) / 2;
         var secX = left + wHH + gap + wMM + secGap;
 
-        // Hours: hollow, drawn as a ring of offset copies with the interior
-        // punched back out in the background colour.
-        drawOutlinedText(dc, left, _timeY, _timeFont, hh, Colors.TEXT);
+        drawHours(dc, left, hh, wHH);
 
         dc.setColor(_minuteColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(left + wHH + gap, _timeY, _timeFont, mm,
@@ -333,10 +359,123 @@ class MindFaceView extends WatchUi.WatchFace {
         _secY = baseline + _secDescent - _secHeight;
     }
 
+    // Hours: hollow, drawn as a ring of offset copies with the interior punched
+    // back out in the background colour. That is nine passes of the largest
+    // font on the face, so it is kept in a buffer and re-rendered on the hour.
+    private function drawHours(dc as Graphics.Dc, left as Number, hh as String, wHH as Number) as Void {
+        var t = OUTLINE_WIDTH;
+
+        // The width follows from the font and the string, and onLayout clears
+        // _hourText whenever the fonts change, so the hour alone keys the cache.
+        if (!hh.equals(_hourText)) {
+            buildHourBuffer(hh, wHH + 2 * t);
+        }
+
+        var buf = _hourBuf;
+        if (buf == null) {
+            drawOutlinedText(dc, left, _timeY, _timeFont, hh, Colors.TEXT);
+            return;
+        }
+        dc.drawBitmap(left - t, _timeY - _timeHeight / 2 - t, buf);
+    }
+
+    private function buildHourBuffer(hh as String, width as Number) as Void {
+        // Recorded even when the buffer cannot be had, so a device without them
+        // is not asked again on every frame -- only when the hour changes.
+        _hourText = hh;
+
+        var t = OUTLINE_WIDTH;
+        var height = _timeHeight + 2 * t;
+        var buffer = newBuffer(width, height);
+        _hourBuf = buffer;
+        if (buffer == null) {
+            return;
+        }
+
+        var bufDc = buffer.getDc();
+        if (bufDc has :setAntiAlias) {
+            bufDc.setAntiAlias(true);
+        }
+        bufDc.setColor(Colors.BACKGROUND, Colors.BACKGROUND);
+        bufDc.clear();
+        drawOutlinedText(bufDc, t, height / 2, _timeFont, hh, Colors.TEXT);
+    }
+
     private function drawSeconds(dc as Graphics.Dc) as Void {
-        var ss = System.getClockTime().sec.format("%02d");
-        dc.setColor(_minuteColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(_secX, _secY, _secFont, ss, Graphics.TEXT_JUSTIFY_LEFT);
+        var sec = System.getClockTime().sec;
+        var atlas = _secAtlas;
+
+        if (atlas == null) {
+            dc.setColor(_minuteColor, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(_secX, _secY, _secFont, sec.format("%02d"), Graphics.TEXT_JUSTIFY_LEFT);
+            return;
+        }
+
+        drawDigit(dc, _secX, sec / 10, atlas);
+        drawDigit(dc, _secX + _secDigitW, sec % 10, atlas);
+
+        // Each digit clips to its own cell, so the clip has to be dropped again
+        // -- the full update clears the whole screen right after this.
+        dc.clearClip();
+    }
+
+    // One cell of the atlas: clip to where the digit belongs on screen, then
+    // slide the whole strip so that the wanted cell lands inside the clip.
+    private function drawDigit(dc as Graphics.Dc, x as Number, digit as Number, atlas as Graphics.BufferedBitmap) as Void {
+        dc.setClip(x, _secY, _secDigitW, _secHeight);
+        dc.drawBitmap(x - digit * _secDigitW, _secY, atlas);
+    }
+
+    private function buildSecondsAtlas() as Void {
+        _secAtlas = null;
+
+        _secDigitW = _secWidth / 2;
+        // Keep the measured width in step with the cells, so the layout and the
+        // clip agree on where the seconds end.
+        _secWidth = _secDigitW * 2;
+
+        var atlas = newBuffer(_secDigitW * 10, _secHeight);
+        if (atlas == null) {
+            return;
+        }
+
+        var bufDc = atlas.getDc();
+        if (bufDc has :setAntiAlias) {
+            bufDc.setAntiAlias(true);
+        }
+        bufDc.setColor(Colors.BACKGROUND, Colors.BACKGROUND);
+        bufDc.clear();
+        bufDc.setColor(_minuteColor, Graphics.COLOR_TRANSPARENT);
+
+        // Centred in its own cell: the cells are a fixed width, so a digit must
+        // not be placed by its own advance width.
+        for (var d = 0; d < 10; d++) {
+            bufDc.drawText(d * _secDigitW + _secDigitW / 2, 0, _secFont, d.toString(),
+                Graphics.TEXT_JUSTIFY_CENTER);
+        }
+        _secAtlas = atlas;
+    }
+
+    // Buffers are drawn into off the hot paths and live in the device graphics
+    // pool rather than the app heap. A device without them, or a pool with no
+    // room left, just leaves the caller drawing directly.
+    private function newBuffer(width as Number, height as Number) as Graphics.BufferedBitmap? {
+        if (width <= 0 || height <= 0) {
+            return null;
+        }
+
+        var options = { :width => width, :height => height };
+        try {
+            if (Graphics has :createBufferedBitmap) {
+                return Graphics.createBufferedBitmap(options).get() as Graphics.BufferedBitmap?;
+            }
+            if (Graphics has :BufferedBitmap) {
+                return new Graphics.BufferedBitmap(options);
+            }
+        } catch (ex) {
+            return null;
+        }
+        return null;
     }
 
     private function drawOutlinedText(dc as Graphics.Dc, x as Number, y as Number, font as Graphics.FontType, text as String, color as Number) as Void {
@@ -432,9 +571,16 @@ class MindFaceView extends WatchUi.WatchFace {
 
     // -- data ---------------------------------------------------------------
 
-    // Read once per update and hold the last good value: the history can come
-    // back empty for a poll or two, and without this the reading blinks out.
-    private function refreshBodyBattery() as Void {
+    // Hold the last good value: the history can come back empty for a poll or
+    // two, and without this the reading blinks out. Body Battery moves on a
+    // scale of minutes, while onUpdate runs every second whenever the wrist is
+    // raised, so the history is only opened when the minute turns.
+    private function refreshBodyBattery(minute as Number) as Void {
+        if (minute == _bodyBatteryMinute) {
+            return;
+        }
+        _bodyBatteryMinute = minute;
+
         var value = readBodyBattery();
         if (value != null) {
             _bodyBattery = value;
@@ -442,7 +588,7 @@ class MindFaceView extends WatchUi.WatchFace {
     }
 
     private function readBodyBattery() as Number? {
-        if (!(Toybox has :SensorHistory) || !(Toybox.SensorHistory has :getBodyBatteryHistory)) {
+        if (!_hasBodyBattery) {
             return null;
         }
         var iterator = Toybox.SensorHistory.getBodyBatteryHistory({
