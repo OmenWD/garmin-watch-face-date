@@ -32,8 +32,8 @@ class MindFaceView extends WatchUi.WatchFace {
     // Sizes for the date and the small labels, as a share of screen height.
     // These land between FONT_XTINY (21px) and FONT_TINY (29px), which the
     // bitmap ladder cannot do -- hence the vector face.
-    private const DATE_SIZE_RATIO = 0.100;
-    private const LABEL_SIZE_RATIO = 0.092;
+    private const DATE_SIZE_RATIO = 0.115;
+    private const LABEL_SIZE_RATIO = 0.108;
     private const LABEL_FACE = "RobotoCondensedBold";
 
     // Vector faces the firmware carries. Index comes from the TimeFont setting,
